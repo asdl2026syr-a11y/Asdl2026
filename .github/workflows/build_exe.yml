@@ -1,0 +1,41 @@
+name: Build Standalone Windows Executable
+
+on:
+  push:
+    branches: [ "main", "master", "رئيسي" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build EXE with PyInstaller
+        run: |
+          pyinstaller --noconfirm --onedir --windowed --name "PlateArchivePro" `
+            --collect-all xlwings `
+            app.py
+
+      - name: Compress Output to ZIP
+        run: |
+          Compress-Archive -Path dist/PlateArchivePro/* -DestinationPath dist/PlateArchivePro_Release.zip
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlateArchivePro-Windows
+          path: dist/PlateArchivePro_Release.zip
