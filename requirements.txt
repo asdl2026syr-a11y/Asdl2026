@@ -1,0 +1,3 @@
+xlwings
+pywin32
+pillow
