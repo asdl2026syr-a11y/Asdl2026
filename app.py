@@ -6,14 +6,12 @@ import os
 import sys
 import math
 import random
-import json
 import sqlite3
 import shutil
 import ctypes
-import time
 from datetime import datetime, timedelta
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog
 
 try:
     import xlwings as xw
@@ -129,7 +127,6 @@ class PlateManagerMilitaryApp:
         self.pinned_notes = tk.BooleanVar(value=False)
         self.last_note = ""
         self.data_cache = []
-        self.data_cache_mtime = None
         self.audit_path = None
         self.backup_dir = None
 
