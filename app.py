@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-APP_VERSION = "3.5.0"
+APP_VERSION = "3.6.0"
 APP_NAME = "Plate Archive Pro"
 
 import os
@@ -310,14 +310,14 @@ class PlateManagerMilitaryApp:
         self.ent_plate.pack(fill="x", ipady=4, pady=(0, 6))
         self.ent_plate.bind("<Return>", lambda e: self.save_plate_direct())
 
-        # 2. رقم الحزمة (مثبت لحتى يتم تغييره)
+        # 2. رقم الحزمة (مثبت تلقائياً حتى تغييره)
         tk.Label(body, text="* رقم الحزمة (B) [مثبت تلقائياً حتى تغييره]:", bg="#FFFFFF", fg="#1E293B", font=("Segoe UI", 10, "bold")).pack(anchor="e", pady=(2, 2))
         self.ent_box = tk.Entry(body, font=("Segoe UI", 12), bg="#F8FAFC", relief="solid", bd=1, justify="center")
         self.ent_box.pack(fill="x", ipady=3, pady=(0, 6))
         self.ent_box.bind("<KeyRelease>", self.on_box_type_delayed)
         self.ent_box.bind("<Return>", lambda e: self.save_plate_direct())
 
-        # 3. العمود D: مربع يظهر المختار فقط مع التبديل بالأسهم أو النقر
+        # 3. العمود D: حالة الرخصة (تبديل بالأسهم أو بالنقر)
         tk.Label(body, text="* العمود D: حالة الرخصة (تبديل بالأسهم ↑ و ↓ أو بالنقر):", bg="#FFFFFF", fg="#0284C7", font=("Segoe UI", 9, "bold")).pack(anchor="e", pady=(2, 2))
         self.btn_license_display = tk.Button(
             body,
@@ -333,7 +333,7 @@ class PlateManagerMilitaryApp:
         )
         self.btn_license_display.pack(fill="x", pady=(0, 8))
 
-        # 4. العمود E: مربع الحالة يظهر المختار فقط (جديدة / قديمة)
+        # 4. العمود E: الحالة (تبديل بالأسهم أو بالنقر)
         tk.Label(body, text="* العمود E: الحالة (تبديل بالأسهم → و ← أو بالنقر):", bg="#FFFFFF", fg="#059669", font=("Segoe UI", 9, "bold")).pack(anchor="e", pady=(2, 2))
         self.btn_status_display = tk.Button(
             body,
@@ -425,6 +425,7 @@ class PlateManagerMilitaryApp:
             self._init_storage_paths()
             self.lbl_file.config(text=os.path.basename(path), fg="#38BDF8")
             self.update_stats_async()
+            self.on_box_type()
             self.show_toast("✔ تم ربط ملف Excel بنجاح")
 
     def get_sheet(self):
@@ -567,7 +568,8 @@ class PlateManagerMilitaryApp:
         self.undo_history.append(res)
         self.refresh_recent()
         self.ent_plate.delete(0, tk.END)
-        # رقم الحزمة يبقى ثابتاً كما هو ولا يُمسح
+        
+        # خيارات العمود F
         if not self.pinned_options.get():
             self.ent_options.delete(0, tk.END)
         else:
@@ -577,6 +579,7 @@ class PlateManagerMilitaryApp:
 
         self.ent_plate.focus()
         self.update_stats_async()
+        self.on_box_type()  # تحديث العداد تلقائياً
         self.show_toast(f"✔ تم حفظ {res['plate']} في الحزمة B{res['box']}")
 
     def _finish_error(self, msg):
@@ -698,6 +701,7 @@ class PlateManagerMilitaryApp:
         self.lbl_mode.config(text="وضع: إضافة جديدة", bg="#ECFDF5", fg="#047857")
         self.ent_plate.delete(0, tk.END)
         self.update_stats_async()
+        self.on_box_type()  # تحديث العداد تلقائياً
         self.show_toast("✔ تم تعديل السجل بنجاح")
 
     def undo_last(self):
@@ -725,6 +729,7 @@ class PlateManagerMilitaryApp:
         self.undo_history.pop()
         self.refresh_recent()
         self.update_stats_async()
+        self.on_box_type()  # تحديث العداد تلقائياً
         self.show_toast(f"↩ تم التراجع عن {rec['plate']}")
 
     def update_stats_async(self):
@@ -832,6 +837,7 @@ class PlateManagerMilitaryApp:
                 self.col_status = entries["col_status"].get().strip().upper()
                 self.col_options = entries["col_options"].get().strip().upper()
                 self.update_stats_async()
+                self.on_box_type()
                 win.destroy()
                 self.show_toast("✔ تم حفظ تخصيص الأعمدة بنجاح")
             except Exception as ex:
@@ -1018,7 +1024,7 @@ class PlateManagerMilitaryApp:
         if not self.excel_path: self.show_toast("اختر ملف إكسل أولاً!", True); return
         self._init_storage_paths()
         win = tk.Toplevel(self.root); win.title("النسخ الاحتياطي والاستعادة"); win.geometry("680x420"); win.configure(bg="#F0F4F8")
-        tk.Label(win, text="النسخ الاحتياطي والاستعادة اليدوية", bg="#0A1D37", fg="white", font=("Segoe UI", 12, "bold"), pady=8).pack(fill="x")
+        tk.Label(win, text="النسخ الاحتياطي والاستعادة اليدوية", bg="#0A1D37", fg="white", font=("Segoe UI", 12, "bold"), pady=8)
         tree = ttk.Treeview(win, columns=("name", "date"), show="headings")
         for c, t, w in (("name","اسم ملف النسخة",420),("date","التاريخ",180)):
             tree.heading(c, text=t); tree.column(c, width=w, anchor="center")
@@ -1036,7 +1042,7 @@ class PlateManagerMilitaryApp:
             if not sel: return
             if messagebox.askyesno("تأكيد", "هل تريد استعادة النسخة المحددة واستبدال الملف الحالي؟", parent=win):
                 shutil.copy2(sel[0], self.excel_path)
-                self.update_stats_async(); self.show_toast("✔ تمت الاستعادة بنجاح")
+                self.update_stats_async(); self.on_box_type(); self.show_toast("✔ تمت الاستعادة بنجاح")
         bar = tk.Frame(win, bg="#F0F4F8"); bar.pack(fill="x", padx=15, pady=8)
         tk.Button(bar, text="💾 إنشاء نسخة الآن", command=do_backup, bg="#059669", fg="white", relief="flat", pady=6).pack(side="right", padx=5)
         tk.Button(bar, text="♻ استعادة المحددة", command=do_restore, bg="#DC2626", fg="white", relief="flat", pady=6).pack(side="right", padx=5)
