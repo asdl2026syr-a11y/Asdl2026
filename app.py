@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-APP_VERSION = "3.4.0"
+APP_VERSION = "3.5.0"
 APP_NAME = "Plate Archive Pro"
 
 import os
@@ -127,6 +127,7 @@ class PlateManagerMilitaryApp:
         self.excel_path = None
         self.busy = False
         self.edit_mode = None
+        self.found_record = None
         self.undo_history = []
         self.max_undo = 10
         self.data_cache = []
@@ -134,7 +135,11 @@ class PlateManagerMilitaryApp:
         self.backup_dir = None
         self._box_debounce_id = None
 
-        # إعدادات الأعمدة الافتراضية
+        # تثبيت خيارات إضافية
+        self.pinned_options = tk.BooleanVar(value=False)
+        self.last_options = ""
+
+        # إعدادات الأعمدة
         self.start_row = 5
         self.col_plate = "A"
         self.col_box = "B"
@@ -143,20 +148,16 @@ class PlateManagerMilitaryApp:
         self.col_status = "E"
         self.col_options = "F"
 
-        # العمود D: الرخصة
+        # خيارات الرخصة (مرفقة / غير مرفقة)
         self.license_options = [
-            "مرفق برخصة اثناء الارشفة",
-            "غير مرفق برخصة اثناء الارشفة"
+            "مرفقة برخصة اثناء الارشفة",
+            "غير مرفقة برخصة اثناء الارشفة"
         ]
-        self.license_var = tk.StringVar(value=self.license_options[0])
+        self.license_index = 0
 
-        # العمود E: الحالة
+        # خيارات الحالة (جديدة / قديمة)
         self.status_options = ["جديدة", "قديمة"]
-        self.status_var = tk.StringVar(value="جديدة")
-
-        # العمود F: خيارات
-        self.f_options = ["افتراضي", "محجوز", "فحص دوري", "استثناء", "مكتمل"]
-        self.f_options_var = tk.StringVar(value="افتراضي")
+        self.status_index = 0
 
         self.prayer_visible = True
 
@@ -168,18 +169,29 @@ class PlateManagerMilitaryApp:
 
     def setup_keyboard_nav(self):
         self.root.bind("<Control-z>", lambda e: self.undo_last())
-        self.root.bind("<Up>", lambda e: self.cycle_license(-1))
-        self.root.bind("<Down>", lambda e: self.cycle_license(1))
-        self.root.bind("<Right>", lambda e: self.status_var.set("جديدة"))
-        self.root.bind("<Left>", lambda e: self.status_var.set("قديمة"))
+        self.root.bind("<Up>", lambda e: self.toggle_license(-1))
+        self.root.bind("<Down>", lambda e: self.toggle_license(1))
+        self.root.bind("<Right>", lambda e: self.set_status(0))
+        self.root.bind("<Left>", lambda e: self.set_status(1))
 
-    def cycle_license(self, direction):
-        try:
-            idx = self.license_options.index(self.license_var.get())
-            new_idx = (idx + direction) % len(self.license_options)
-            self.license_var.set(self.license_options[new_idx])
-        except Exception:
-            self.license_var.set(self.license_options[0])
+    def toggle_license(self, step=1):
+        self.license_index = (self.license_index + step) % len(self.license_options)
+        val = self.license_options[self.license_index]
+        self.btn_license_display.config(
+            text=f"✔ {val}",
+            bg="#0284C7" if self.license_index == 0 else "#64748B"
+        )
+
+    def set_status(self, idx):
+        self.status_index = idx
+        val = self.status_options[self.status_index]
+        self.btn_status_display.config(
+            text=f"الحالة: {val}",
+            bg="#059669" if self.status_index == 0 else "#D97706"
+        )
+
+    def toggle_status_click(self):
+        self.set_status(1 - self.status_index)
 
     def update_clock(self):
         if not self.root.winfo_exists(): return
@@ -298,40 +310,55 @@ class PlateManagerMilitaryApp:
         self.ent_plate.pack(fill="x", ipady=4, pady=(0, 6))
         self.ent_plate.bind("<Return>", lambda e: self.save_plate_direct())
 
-        # 2. رقم الحزمة
-        tk.Label(body, text="* رقم الحزمة (B):", bg="#FFFFFF", fg="#1E293B", font=("Segoe UI", 10, "bold")).pack(anchor="e", pady=(2, 2))
+        # 2. رقم الحزمة (مثبت لحتى يتم تغييره)
+        tk.Label(body, text="* رقم الحزمة (B) [مثبت تلقائياً حتى تغييره]:", bg="#FFFFFF", fg="#1E293B", font=("Segoe UI", 10, "bold")).pack(anchor="e", pady=(2, 2))
         self.ent_box = tk.Entry(body, font=("Segoe UI", 12), bg="#F8FAFC", relief="solid", bd=1, justify="center")
         self.ent_box.pack(fill="x", ipady=3, pady=(0, 6))
         self.ent_box.bind("<KeyRelease>", self.on_box_type_delayed)
         self.ent_box.bind("<Return>", lambda e: self.save_plate_direct())
 
-        # 3. العمود D: الرخصة (التبديل بالأسهم ↑ و ↓)
-        tk.Label(body, text="* العمود D: حالة الرخصة (التبديل بالأسهم ↑ و ↓):", bg="#FFFFFF", fg="#0284C7", font=("Segoe UI", 9, "bold")).pack(anchor="e", pady=(2, 2))
-        lic_frame = tk.Frame(body, bg="#F1F5F9", bd=1, relief="solid", padx=6, pady=4)
-        lic_frame.pack(fill="x", pady=(0, 6))
-        for opt in self.license_options:
-            tk.Radiobutton(
-                lic_frame, text=opt, value=opt, variable=self.license_var,
-                bg="#F1F5F9", fg="#0F172A", font=("Segoe UI", 9, "bold"),
-                anchor="e", selectcolor="#38BDF8"
-            ).pack(fill="x", pady=1)
+        # 3. العمود D: مربع يظهر المختار فقط مع التبديل بالأسهم أو النقر
+        tk.Label(body, text="* العمود D: حالة الرخصة (تبديل بالأسهم ↑ و ↓ أو بالنقر):", bg="#FFFFFF", fg="#0284C7", font=("Segoe UI", 9, "bold")).pack(anchor="e", pady=(2, 2))
+        self.btn_license_display = tk.Button(
+            body,
+            text=f"✔ {self.license_options[0]}",
+            bg="#0284C7",
+            fg="white",
+            font=("Segoe UI", 11, "bold"),
+            relief="solid",
+            bd=1,
+            pady=7,
+            cursor="hand2",
+            command=lambda: self.toggle_license(1)
+        )
+        self.btn_license_display.pack(fill="x", pady=(0, 8))
 
-        # 4. العمود E: الحالة (التبديل بالأسهم → و ←)
-        tk.Label(body, text="* العمود E: الحالة (التبديل بالأسهم → و ←):", bg="#FFFFFF", fg="#059669", font=("Segoe UI", 9, "bold")).pack(anchor="e", pady=(2, 2))
-        status_row = tk.Frame(body, bg="#FFFFFF")
-        status_row.pack(fill="x", pady=(0, 6))
-        for val in self.status_options:
-            tk.Radiobutton(
-                status_row, text=val, value=val, variable=self.status_var,
-                bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 10, "bold"),
-                selectcolor="#E0F2FE", indicatoron=False, padx=20, pady=4
-            ).pack(side="right", fill="x", expand=True, padx=2)
+        # 4. العمود E: مربع الحالة يظهر المختار فقط (جديدة / قديمة)
+        tk.Label(body, text="* العمود E: الحالة (تبديل بالأسهم → و ← أو بالنقر):", bg="#FFFFFF", fg="#059669", font=("Segoe UI", 9, "bold")).pack(anchor="e", pady=(2, 2))
+        self.btn_status_display = tk.Button(
+            body,
+            text="الحالة: جديدة",
+            bg="#059669",
+            fg="white",
+            font=("Segoe UI", 11, "bold"),
+            relief="solid",
+            bd=1,
+            pady=7,
+            cursor="hand2",
+            command=self.toggle_status_click
+        )
+        self.btn_status_display.pack(fill="x", pady=(0, 8))
 
-        # 5. العمود F: خيارات
-        tk.Label(body, text="* العمود F: خيارات إضافية:", bg="#FFFFFF", fg="#64748B", font=("Segoe UI", 9, "bold")).pack(anchor="e", pady=(2, 2))
-        self.combo_options = ttk.Combobox(body, values=self.f_options, textvariable=self.f_options_var, state="readonly", font=("Segoe UI", 10), justify="center")
-        self.combo_options.pack(fill="x", ipady=3, pady=(0, 8))
+        # 5. العمود F: خيارات إضافية كتابة حرة مع تثبيت
+        tk.Label(body, text="* العمود F: خيارات إضافية (كتابة يدوية):", bg="#FFFFFF", fg="#64748B", font=("Segoe UI", 9, "bold")).pack(anchor="e", pady=(2, 2))
+        opt_box = tk.Frame(body, bg="#FFFFFF")
+        opt_box.pack(fill="x", pady=(0, 8))
+        self.ent_options = tk.Entry(opt_box, font=("Segoe UI", 11), bg="#F8FAFC", relief="solid", bd=1)
+        self.ent_options.pack(side="right", fill="x", expand=True, ipady=4)
+        tk.Checkbutton(opt_box, text="📌 تثبيت", variable=self.pinned_options, bg="#FFFFFF", font=("Segoe UI", 9, "bold"), command=self.toggle_pin_options).pack(side="left", padx=4)
+        tk.Button(opt_box, text="مسح", bg="#FEE2E2", fg="#B91C1C", relief="flat", command=lambda: self.ent_options.delete(0, tk.END)).pack(side="left")
 
+        # أزرار الحفظ والتراجع
         bf = tk.Frame(body, bg="#FFFFFF")
         bf.pack(fill="x", pady=(4, 0))
         self.btn_save = tk.Button(bf, text="⚡ حفظ مباشر في الإكسل (Enter)", bg="#0284C7", fg="#FFFFFF", font=("Segoe UI", 11, "bold"), relief="flat", cursor="hand2", pady=7, command=self.save_plate_direct)
@@ -356,8 +383,12 @@ class PlateManagerMilitaryApp:
         self.lbl_search_status = tk.Label(body, text="لم يتم إجراء بحث", bg="#F1F5F9", fg="#475569", font=("Segoe UI", 9), pady=6, wraplength=540)
         self.lbl_search_status.pack(fill="x", pady=(0, 4))
 
-        self.btn_edit_found = tk.Button(body, text="✏ تعديل السجل المحدد", bg="#D97706", fg="#FFFFFF", font=("Segoe UI", 10, "bold"), relief="flat", state="disabled", command=self.start_edit_found)
-        self.btn_edit_found.pack(fill="x", pady=2)
+        action_row = tk.Frame(body, bg="#FFFFFF")
+        action_row.pack(fill="x", pady=2)
+        self.btn_edit_found = tk.Button(action_row, text="✏ تعديل السجل", bg="#D97706", fg="#FFFFFF", font=("Segoe UI", 10, "bold"), relief="flat", state="disabled", command=self.start_edit_found)
+        self.btn_edit_found.pack(side="right", fill="x", expand=True, padx=2)
+        self.btn_go_excel = tk.Button(action_row, text="📊 الانتقال إلى خلية اللوحة في Excel", bg="#334155", fg="#FFFFFF", font=("Segoe UI", 9, "bold"), relief="flat", state="disabled", command=self.go_to_found_excel)
+        self.btn_go_excel.pack(side="left", fill="x", expand=True, padx=2)
 
         lf = tk.LabelFrame(body, text="آخر 10 إدخالات", bg="#FFFFFF", fg="#0A1D37", font=("Segoe UI", 9, "bold"), padx=5, pady=5)
         lf.pack(fill="both", expand=True, pady=6)
@@ -369,7 +400,7 @@ class PlateManagerMilitaryApp:
             ("row","صف",45),
             ("opt","خيارات F",80),
             ("status","الحالة",65),
-            ("lic","الرخصة D",120),
+            ("lic","الرخصة D",140),
             ("box","الحزمة",60),
             ("plate","اللوحة",95)
         ):
@@ -379,6 +410,13 @@ class PlateManagerMilitaryApp:
         self.recent_tree.configure(yscrollcommand=sb.set)
         sb.pack(side="left", fill="y")
         self.recent_tree.pack(fill="both", expand=True)
+
+    def toggle_pin_options(self):
+        if self.pinned_options.get():
+            self.last_options = self.ent_options.get().strip()
+            self.show_toast("📌 تم تثبيت خيارات العمود F")
+        else:
+            self.show_toast("📌 تم إلغاء التثبيت")
 
     def select_file(self):
         path = filedialog.askopenfilename(title="اختر ملف الإكسل", filetypes=[("Excel Files", "*.xlsx *.xls *.xlsm")])
@@ -456,7 +494,7 @@ class PlateManagerMilitaryApp:
                         "date": excel_date_text(d_vals[i]),
                         "license": normalize_plate(n_vals[i]),
                         "status": normalize_plate(s_vals[i]) or "جديدة",
-                        "options": normalize_plate(o_vals[i]) or "افتراضي",
+                        "options": normalize_plate(o_vals[i]) or "",
                         "row": self.start_row + i
                     })
             return records
@@ -470,9 +508,11 @@ class PlateManagerMilitaryApp:
             self.show_toast("⚠ اختر ملف Excel أولاً!", True); return
         plate = normalize_plate(self.ent_plate.get())
         box = normalize_box(self.ent_box.get())
-        license_val = self.license_var.get()
-        status = self.status_var.get()
-        options_val = self.f_options_var.get()
+        license_val = self.license_options[self.license_index]
+        status = self.status_options[self.status_index]
+        options_val = self.ent_options.get().strip()
+        if self.pinned_options.get() and not options_val:
+            options_val = self.last_options
 
         if not plate or not box:
             self.show_toast("رقم اللوحة والحزمة مطلوبان!", True); return
@@ -527,7 +567,14 @@ class PlateManagerMilitaryApp:
         self.undo_history.append(res)
         self.refresh_recent()
         self.ent_plate.delete(0, tk.END)
-        self.ent_box.delete(0, tk.END)
+        # رقم الحزمة يبقى ثابتاً كما هو ولا يُمسح
+        if not self.pinned_options.get():
+            self.ent_options.delete(0, tk.END)
+        else:
+            self.last_options = res["options"]
+            self.ent_options.delete(0, tk.END)
+            self.ent_options.insert(0, self.last_options)
+
         self.ent_plate.focus()
         self.update_stats_async()
         self.show_toast(f"✔ تم حفظ {res['plate']} في الحزمة B{res['box']}")
@@ -542,7 +589,7 @@ class PlateManagerMilitaryApp:
         for x in self.recent_tree.get_children(): self.recent_tree.delete(x)
         for r in reversed(self.undo_history[-10:]):
             self.recent_tree.insert("", "end", values=(
-                r["date"], r["row"], r.get("options","افتراضي"),
+                r["date"], r["row"], r.get("options",""),
                 r["status"], r.get("license",""), r["box"], r["plate"]
             ))
 
@@ -566,23 +613,48 @@ class PlateManagerMilitaryApp:
         if found:
             self.found_record = found
             self.lbl_search_status.config(
-                text=f"✔ مسجلة: B{found['box']} | {found['status']} | {found['license']} | {found['options']} | صف {found['row']}", 
+                text=f"✔ مسجلة: B{found['box']} | {found['status']} | {found['license']} | {found.get('options','-')} | صف {found['row']}", 
                 fg="#047857", bg="#ECFDF5"
             )
             self.btn_edit_found.config(state="normal")
+            self.btn_go_excel.config(state="normal")
         else:
             self.found_record = None
             self.lbl_search_status.config(text="❌ غير مسجلة في السجلات", fg="#B91C1C", bg="#FEE2E2")
             self.btn_edit_found.config(state="disabled")
+            self.btn_go_excel.config(state="disabled")
+
+    def go_to_found_excel(self):
+        if not self.found_record or not self.excel_path: return
+        row = self.found_record.get("row")
+        def work():
+            wb, ws = self.get_sheet()
+            ws.range(f"{self.col_plate}{row}").select()
+            wb.app.visible = True
+        try:
+            self.with_com(work)
+            self.show_toast("✔ تم تحديد خلية اللوحة في Excel")
+        except Exception as e:
+            self.show_toast(str(e), True)
 
     def start_edit_found(self):
         if not self.found_record: return
         r = self.found_record
         self.ent_plate.delete(0, tk.END); self.ent_plate.insert(0, r["plate"])
         self.ent_box.delete(0, tk.END); self.ent_box.insert(0, r["box"])
-        self.license_var.set(r.get("license", self.license_options[0]))
-        self.status_var.set(r["status"])
-        self.f_options_var.set(r.get("options", "افتراضي"))
+        self.ent_options.delete(0, tk.END); self.ent_options.insert(0, r.get("options", ""))
+        
+        lic = r.get("license", "")
+        if lic in self.license_options:
+            self.license_index = self.license_options.index(lic)
+        else:
+            self.license_index = 0
+        self.toggle_license(0)
+
+        st = r.get("status", "جديدة")
+        if st in self.status_options:
+            self.set_status(self.status_options.index(st))
+
         self.edit_mode = r.copy()
         self.lbl_mode.config(text=f"✏ وضع التعديل — الصف {r['row']}", bg="#FFF7ED", fg="#9A3412")
         self.btn_save.config(text="تحديث وحفظ (Enter)", bg="#D97706")
@@ -591,9 +663,9 @@ class PlateManagerMilitaryApp:
         r = self.edit_mode
         new_p = normalize_plate(self.ent_plate.get())
         new_b = normalize_box(self.ent_box.get())
-        license_val = self.license_var.get()
-        status = self.status_var.get()
-        opt_val = self.f_options_var.get()
+        license_val = self.license_options[self.license_index]
+        status = self.status_options[self.status_index]
+        opt_val = self.ent_options.get().strip()
 
         self.busy = True
         self.btn_save.config(state="disabled")
@@ -624,7 +696,7 @@ class PlateManagerMilitaryApp:
         self.edit_mode = None
         self.btn_save.config(text="⚡ حفظ مباشر في الإكسل (Enter)", bg="#0284C7", state="normal")
         self.lbl_mode.config(text="وضع: إضافة جديدة", bg="#ECFDF5", fg="#047857")
-        self.ent_plate.delete(0, tk.END); self.ent_box.delete(0, tk.END)
+        self.ent_plate.delete(0, tk.END)
         self.update_stats_async()
         self.show_toast("✔ تم تعديل السجل بنجاح")
 
