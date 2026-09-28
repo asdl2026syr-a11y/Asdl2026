@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-APP_VERSION = "3.6.0"
+APP_VERSION = "3.7.0"
 APP_NAME = "Plate Archive Pro"
 
 import os
@@ -878,19 +878,46 @@ class PlateManagerMilitaryApp:
                     if sh.name == sheet_name: sh.delete()
                 ws = wb.sheets.add(sheet_name, after=wb.sheets[len(wb.sheets)-1])
                 ws.api.DisplayRightToLeft = True
-                ws.range("A1:F1").merge(); ws.range("A1").value = "أرشيف اللوحات - تقرير الصندوق"
-                ws.range("A1").font.bold = True; ws.range("A1").font.size = 13; ws.range("A1").api.HorizontalAlignment = -4108
-                ws.range("A2:F2").merge(); ws.range("A2").value = f"كشف لوحات الصندوق (B{b_target}) | تاريخ الإصدار: {datetime.now().strftime('%d/%m/%Y')}"
-                ws.range("A2").font.bold = True; ws.range("A2").api.HorizontalAlignment = -4108
-                ws.range("A4:F4").value = ["ت", "رقم اللوحة", "الحزمة", "التاريخ", "الرخصة", "الحالة"]
-                ws.range("A4:F4").color = "#0A1D37"; ws.range("A4:F4").api.Font.Color = 0xFFFFFF; ws.range("A4:F4").api.Font.Bold = True; ws.range("A4:F4").api.HorizontalAlignment = -4108
+
+                # سطر عنوان واحد مدمج يجمع اسم التقرير والصندوق والتاريخ لتوفير المساحة بالكامل
+                ws.range("A1:F1").merge()
+                ws.range("A1").value = f"أرشيف اللوحات — كشف لوحات الصندوق (B{b_target}) — تاريخ الطباعة: {datetime.now().strftime('%d/%m/%Y')}"
+                ws.range("A1").font.bold = True
+                ws.range("A1").font.size = 11
+                ws.range("A1").api.HorizontalAlignment = -4108
+                ws.range("A1:F1").row_height = 24
+
+                # ترويسة الجدول تبدأ مباشرة من السطر 2
+                ws.range("A2:F2").value = ["ت", "رقم اللوحة", "الحزمة", "التاريخ", "الرخصة", "الحالة"]
+                ws.range("A2:F2").color = "#0A1D37"
+                ws.range("A2:F2").api.Font.Color = 0xFFFFFF
+                ws.range("A2:F2").api.Font.Bold = True
+                ws.range("A2:F2").api.HorizontalAlignment = -4108
+                ws.range("A2:F2").row_height = 20
+
                 rows = [[i, f"'{r['plate']}", f"B{r['box']}", f"'{r['date']}", r.get('license',''), r.get('status','')] for i, r in enumerate(records, 1)]
-                end_r = 4 + len(rows)
-                ws.range(f"A5:F{end_r}").value = rows
-                ws.range(f"A4:F{end_r}").api.Borders.LineStyle = 1
-                ws.range(f"A4:F{end_r}").api.HorizontalAlignment = -4108
-                for col, w in zip("ABCDEF", [6, 16, 12, 14, 26, 10]): ws.range(f"{col}:{col}").column_width = w
-                ps = ws.api.PageSetup; ps.Orientation = 1; ps.PaperSize = 9; ps.CenterHorizontally = True
+                end_r = 2 + len(rows)
+                ws.range(f"A3:F{end_r}").value = rows
+                ws.range(f"A2:F{end_r}").api.Borders.LineStyle = 1
+                ws.range(f"A2:F{end_r}").api.HorizontalAlignment = -4108
+                ws.range(f"A3:F{end_r}").row_height = 18
+
+                for col, w in zip("ABCDEF", [5, 14, 10, 12, 28, 10]):
+                    ws.range(f"{col}:{col}").column_width = w
+
+                # إعداد الصفحة: هوامش ضيقة وضغط تلقائي ليتسع بصفحة واحدة (1 Page Wide x 1 Page Tall)
+                ps = ws.api.PageSetup
+                ps.Orientation = 1  # طولي Portrait
+                ps.PaperSize = 9    # A4
+                ps.TopMargin = app.api.InchesToPoints(0.3)
+                ps.BottomMargin = app.api.InchesToPoints(0.3)
+                ps.LeftMargin = app.api.InchesToPoints(0.3)
+                ps.RightMargin = app.api.InchesToPoints(0.3)
+                ps.CenterHorizontally = True
+                ps.Zoom = False
+                ps.FitToPagesWide = 1
+                ps.FitToPagesTall = 1
+
                 ws.api.ExportAsFixedFormat(0, os.path.abspath(path))
                 ws.delete(); app.screen_updating = True; app.display_alerts = True
 
